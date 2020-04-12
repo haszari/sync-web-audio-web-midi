@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Sync demo - Web Audio API & Web MIDI API</title>
+  </head>
+  <body>
+
+    <button id='playSound'>Play Sound</button>
+
+    <script type="module">
+
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      var audioContext;
+      audioContext = new AudioContext(); 
+
+      // Play audio and midi in sync 1.5 seconds after button click
+      const offset = 1.5; 
+      const duration = 0.5; 
+      const audioFreq = 440;
+      const midiNote = 69;
+
+      let midiOutPorts = [];
+
+      function openMidiOutputs( options ) {
+        var access = navigator.requestMIDIAccess();
+        access.then( function( midiAccess ) {
+          midiAccess.outputs.forEach( function( port, key ) {
+              midiOutPorts.push( port );
+          } );
+        } );
+      };
+      openMidiOutputs();
+
+      const playButton = document.getElementById( 'playSound' );
+      playButton.onclick = () => {
+        audioContext.resume().then( () => {
+
+          const perfNow = window.performance.now()
+          const audioNow = audioContext.currentTime;
+          const audioContextOffsetSec = ( perfNow / 1000.0 ) - audioNow;
+          console.log( `beep audioNow=${ audioNow } performanceNow=${ perfNow } offset=${ audioContextOffsetSec }`);
+
+          const startSeconds = audioNow + offset;
+          const endSeconds = startSeconds + duration;
+
+          // Play a web audio note 
+          const oscillator = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+
+          oscillator.type = 'triangle';
+          oscillator.frequency.setValueAtTime( audioFreq, audioContext.currentTime );
+          gain.gain.value = 0.5;
+
+          oscillator.connect( gain );
+          gain.connect( audioContext.destination );
+
+          oscillator.start( startSeconds );
+          oscillator.stop( endSeconds );
+
+          const startMidi = startSeconds * 1000;
+          const endMidi= endSeconds * 1000;
+
+          console.log( `audio note start=${ startSeconds } end=${ endSeconds }`);
+          console.log( `midi  note start=${ startMidi } end=${ endMidi }`);
+
+          // Play a web MIDI note 
+          midiOutPorts[0].send(
+            [ 0x90 + 0, midiNote, 100 ],
+            ( startSeconds * 1000 ) + ( audioContextOffsetSec * 1000 )
+          );
+          // note off
+          midiOutPorts[0].send(
+            [ 0x80 + 0, midiNote, 0 ],
+            ( endSeconds * 1000 ) + ( audioContextOffsetSec * 1000 )
+          );
+
+        } );
+      }
+
+    </script>
+
+  </body>
+</html>
